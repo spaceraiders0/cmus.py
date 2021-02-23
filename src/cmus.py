@@ -2,6 +2,7 @@
 """
 
 import re
+import time
 import psutil
 import subprocess
 from pathlib import Path
@@ -22,9 +23,14 @@ class Cmus():
     """The Cmus wrapper.
     """
 
-    events = {
-        "on_started": []
-    }
+    
+    def __init__(self):
+        self._alive = self._is_running()
+        self._events = {
+            "on_started": [],
+            "on_ended": [],
+        }
+
 
     @staticmethod
     def _is_running() -> bool:
@@ -128,13 +134,48 @@ class Cmus():
         else:
             return ""
 
-    def on_started(self, callback: callable):
-        """Hooks a new event for when Cmus starts up.
+    def hook(self, event: str, callback: callable):
+        """Hooks a new event for an event.
 
+        :param event: the name of the event to hook to
+        :type event: str
         :param callback: the function to hook to the event
         :type callback:
         """
 
-        self.events["on_started"].append(callback)
+        if self._events.get(event) is not None:
+            self._events[event].append(callback)
+        else:
+            raise KeyError(f"'{event}' is not an event.")
+
+    def monitor(self, blocking=False):
+        """Begins monitoring for event callbacks.
+
+        :param blocking: whether or not to block
+        :type blocking: bool
+        """
+
+        while True:
+            alive_state = self._is_running()
+
+            # If Cmus is now running, and it was not already opened.
+            if alive_state is True and self._alive is False:
+                self._alive = True
+
+                # Fire each event.
+                for event in self._events["on_started"]:
+                    event(time.time())
+
+            # If Cmus is no longer running, and it is not already dead.
+            if alive_state is False and self._alive is True:
+                self._alive = False
+
+                # Fire each event.
+                for event in self._events["on_ended"]:
+                    event(time.time())
+
 
 myCmus = Cmus()
+myCmus.hook("on_started", lambda timestamp: print(f"Started: {timestamp}"))
+myCmus.hook("on_ended", lambda timestamp: print(f"Ended: {timestamp}"))
+myCmus.monitor()
